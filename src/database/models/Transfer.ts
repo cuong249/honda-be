@@ -10,7 +10,7 @@ class Transfer extends Model {
   declare fromWarehouseId: string;
   declare toWarehouseId: string;
   declare machineId: string;
-  declare transferDate: string;
+  declare transferDate: Date;
   declare status: STATUS_TRANSFER;
   declare state: STATE;
   declare option: string;
@@ -49,11 +49,11 @@ Transfer.init(
       field: "machine_id",
     },
     transferDate: {
-      type: DataTypes.STRING,
+      type: DataTypes.DATE,
       allowNull: false,
       field: "transfer_date",
       get() {
-        return this.getDataValue("createdAt").getTime();
+        return this.getDataValue("transferDate").getTime();
       },
     },
     status: {

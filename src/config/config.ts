@@ -16,6 +16,7 @@ import { TransferDetail } from "../database/models/TransferDetail";
 import { Warehouse } from "../database/models/Warehouse";
 import { createPermission } from "./Permission";
 import cookieParser from "cookie-parser";
+import { Maintenance } from "../database/models/Maintenance";
 
 const corsOptions = {
   origin: true,
@@ -46,6 +47,7 @@ async function createDatabase() {
   await Transfer.sync({ alter: true });
   await TransferDetail.sync({ alter: true });
   await Warehouse.sync({ alter: true });
+  await Maintenance.sync({ alter: true });
 }
 
 async function initDatabase() {

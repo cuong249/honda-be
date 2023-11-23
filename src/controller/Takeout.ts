@@ -9,10 +9,10 @@ import { Scan } from "../database/models/Scan";
 import { ROLE, STATE } from "../database/enum/enum";
 import { Product } from "../database/models/Product";
 import { Op } from "sequelize";
+import { Machine } from "../database/models/Machine";
 
 async function getTakeout(req: Request, res: Response) {
   try {
-    const role = res.locals.role;
     const { id } = req.params;
     const { query } = req.query;
     const queryObj = query ? JSON.parse(query as string) : {};
@@ -93,6 +93,18 @@ async function getTakeout(req: Request, res: Response) {
         });
       }
     }
+    const fromWarehouse: Warehouse | null = await Warehouse.findOne({
+      where: { id: transfer.fromWarehouseId },
+    });
+    if (fromWarehouse) transfer.setDataValue("fromWarehouse", fromWarehouse);
+    const toWarehouse: Warehouse | null = await Warehouse.findOne({
+      where: { id: transfer.toWarehouseId },
+    });
+    if (toWarehouse) transfer.setDataValue("toWarehouse", toWarehouse);
+    const machine: Machine | null = await Machine.findOne({
+      where: { id: transfer.machineId },
+    });
+    if (machine) transfer.setDataValue("machine", machine);
     const takeout: Transfer = transfer;
     takeout.setDataValue("listProduct", listProduct);
     res.status(200).json({ takeout });
@@ -124,23 +136,100 @@ async function getListTakeout(req: Request, res: Response) {
       offset: offset ? Number(offset) : undefined,
       order: orderConditions,
       where: {
-        [Op.and]: [{}, queryObj],
+        [Op.and]: [
+          {
+            [Op.or]: [
+              {
+                title: {
+                  [Op.like]: search ? "%" + search + "%" : "%%",
+                },
+              },
+            ],
+          },
+          queryObj,
+        ],
       },
     });
-    const listTakeout = rows;
-    for (var takeout of listTakeout) {
+    const listTransfer = rows;
+    for (var transfer of listTransfer) {
+      const listTransferDetail: Array<TransferDetail> =
+        await TransferDetail.findAll({
+          where: { transferId: transfer.id, state: STATE.ACTIVE },
+        });
+      const listScan: Array<Scan> = await Scan.findAll({
+        where: { transferId: transfer.id, state: STATE.ACTIVE },
+      });
+      const listProduct: Array<Object> = new Array<Object>();
+      for (var transferDetail of listTransferDetail) {
+        const scanFound = listScan.find((scan) => {
+          return scan.productId === transferDetail.productId;
+        });
+        if (scanFound) {
+          listProduct.push({
+            id: transferDetail.id,
+            scanId: scanFound.id,
+            productId: transferDetail.productId,
+            categoryId: transferDetail.categoryId,
+            description: transferDetail.description,
+            status: transferDetail.status,
+            state: transferDetail.state,
+            option: transferDetail.option,
+            machineId: scanFound.machineId,
+            import: scanFound.import,
+          });
+        } else {
+          listProduct.push({
+            id: transferDetail.id,
+            scanId: null,
+            productId: transferDetail.productId,
+            categoryId: transferDetail.categoryId,
+            description: transferDetail.description,
+            status: transferDetail.status,
+            state: transferDetail.state,
+            option: transferDetail.option,
+            machineId: null,
+            import: null,
+          });
+        }
+      }
+      for (var scan of listScan) {
+        const ProductFound = listProduct.find((product) => {
+          return (product as TransferDetail).productId === scan.productId;
+        });
+        if (ProductFound) {
+          continue;
+        } else {
+          const product: Product | null = await Product.findOne({
+            where: { id: scan.productId },
+          });
+          listProduct.push({
+            id: null,
+            scanId: scan.id,
+            productId: scan.productId,
+            categoryId: product?.categoryId,
+            description: null,
+            status: null,
+            state: null,
+            option: null,
+            machineId: scan.machineId,
+            import: scan.import,
+          });
+        }
+      }
       const fromWarehouse: Warehouse | null = await Warehouse.findOne({
-        where: { id: takeout.fromWarehouseId },
+        where: { id: transfer.fromWarehouseId },
       });
-      if (fromWarehouse) takeout.setDataValue("fromWarehouse", fromWarehouse);
+      if (fromWarehouse) transfer.setDataValue("fromWarehouse", fromWarehouse);
       const toWarehouse: Warehouse | null = await Warehouse.findOne({
-        where: { id: takeout.toWarehouseId },
+        where: { id: transfer.toWarehouseId },
       });
-      if (toWarehouse) takeout.setDataValue("toWarehouse", toWarehouse);
+      if (toWarehouse) transfer.setDataValue("toWarehouse", toWarehouse);
+      const takeout: Transfer = transfer;
+      takeout.setDataValue("listProduct", listProduct);
     }
     res.status(200).json({
       amount: count,
-      takeouts: listTakeout,
+      takeouts: listTransfer,
     });
   } catch (err: any) {
     var statusCode = res.statusCode == 200 ? null : res.statusCode;

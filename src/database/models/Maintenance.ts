@@ -1,43 +1,48 @@
 import { DataTypes, Model } from "sequelize";
 import { v4 as uuid } from "uuid";
-import { STATE, TYPE_WAREHOUSE } from "../enum/enum";
+import { STATE_MAINTENANCE } from "../enum/enum";
 import { sequelizeConnection } from "../database";
-import { Product } from "./Product";
 
-class Warehouse extends Model {
+class Maintenance extends Model {
   declare id: string;
-  declare name: string;
-  declare address: string;
-  declare type: TYPE_WAREHOUSE;
+  declare productId: string;
+  declare startDate: Date;
+  declare finishDate: Date;
   declare description: string;
-  declare state: STATE;
+  declare state: STATE_MAINTENANCE;
   declare option: string;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
-Warehouse.init(
+Maintenance.init(
   {
     id: {
       type: DataTypes.UUID,
       defaultValue: () => uuid(),
       primaryKey: true,
     },
-    name: {
+    productId: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: "product_id",
     },
-    address: {
-      type: DataTypes.STRING,
+    startDate: {
+      type: DataTypes.DATE,
       allowNull: false,
+      get() {
+        return this.getDataValue("startDate").getTime();
+      },
+      field: "start_date",
     },
-    type: {
-      type: DataTypes.ENUM,
-      values: [
-        TYPE_WAREHOUSE.MAKER,
-        TYPE_WAREHOUSE.HONDA,
-        TYPE_WAREHOUSE.OTHER,
-      ],
-      allowNull: false,
+    finishDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      get() {
+        if (this.getDataValue("finishDate")) {
+          return this.getDataValue("finishDate").getTime();
+        }
+      },
+      field: "finish_date",
     },
     description: {
       type: DataTypes.STRING,
@@ -45,7 +50,11 @@ Warehouse.init(
     },
     state: {
       type: DataTypes.ENUM,
-      values: [STATE.ACTIVE, STATE.INACTIVE, STATE.DELETED],
+      values: [
+        STATE_MAINTENANCE.COMPLETED,
+        STATE_MAINTENANCE.DOING,
+        STATE_MAINTENANCE.DELETED,
+      ],
       allowNull: false,
     },
     option: {
@@ -69,7 +78,7 @@ Warehouse.init(
   },
   {
     sequelize: sequelizeConnection,
-    tableName: "Warehouse",
+    tableName: "Maintenance",
     timestamps: true,
     charset: "utf8",
   }
@@ -77,4 +86,4 @@ Warehouse.init(
 
 // Warehouse.hasMany(Product);
 
-export { Warehouse };
+export { Maintenance };

@@ -7,12 +7,12 @@ class Product extends Model {
   declare id: string;
   declare name: string;
   declare rfid: string;
-  declare qrcode: string;
   declare numberCode: string;
   declare categoryId: string;
   declare storageWarehouseId: string;
   declare deliveryWarehouseId: string;
   declare currentWarehouseId: string;
+  declare maintainNext: Date;
   declare state: STATE_MAINTAIN;
   declare option: string;
   declare readonly createdAt: Date;
@@ -30,10 +30,6 @@ Product.init(
       allowNull: false,
     },
     rfid: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    qrcode: {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -61,6 +57,16 @@ Product.init(
       type: DataTypes.STRING,
       allowNull: false,
       field: "current_warehouse_id",
+    },
+    maintainNext: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      get() {
+        if (this.getDataValue("maintainNext")) {
+          return this.getDataValue("maintainNext").getTime();
+        }
+      },
+      field: "maintain_next",
     },
     state: {
       type: DataTypes.ENUM,

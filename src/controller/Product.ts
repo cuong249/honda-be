@@ -1,17 +1,22 @@
 import { Request, Response } from "express";
 import { v4 as uuid } from "uuid";
 import { Product } from "../database/models/Product";
-import { ROLE, STATE, STATE_MAINTAIN } from "../database/enum/enum";
+import {
+  ROLE,
+  STATE,
+  STATE_MAINTAIN,
+  STATE_MAINTENANCE,
+} from "../database/enum/enum";
 import { Category } from "../database/models/Category";
 import { Warehouse } from "../database/models/Warehouse";
-import { Op } from "sequelize";
+import { DATE, Op } from "sequelize";
+import { Maintenance } from "../database/models/Maintenance";
 
 async function getProduct(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { query } = req.query;
     const queryObj = query ? JSON.parse(query as string) : {};
-    console.log(id);
 
     let product: Product | null = new Product();
     product = await Product.findOne({
@@ -87,6 +92,16 @@ async function getProduct(req: Request, res: Response) {
     });
     if (currentWarehouse) {
       product.setDataValue("currentWarehouse", currentWarehouse);
+    }
+    const listMaintenance = await Maintenance.findAll({
+      order: [["createdAt", "DESC"]],
+      where: {
+        productId: product.id,
+      },
+    });
+    if (listMaintenance.length) {
+      const maintenance = listMaintenance[0];
+      product.setDataValue("maintenance", maintenance);
     }
     res.status(200).json({ product });
   } catch (err: any) {
@@ -200,6 +215,16 @@ async function getListProduct(req: Request, res: Response) {
       if (currentWarehouse) {
         product.setDataValue("currentWarehouse", currentWarehouse);
       }
+      const listMaintenance = await Maintenance.findAll({
+        order: [["createdAt", "DESC"]],
+        where: {
+          productId: product.id,
+        },
+      });
+      if (listMaintenance.length) {
+        const maintenance = listMaintenance[0];
+        product.setDataValue("maintenance", maintenance);
+      }
     }
     res.status(200).json({ amount: count, products: listProduct });
   } catch (err: any) {
@@ -218,7 +243,6 @@ async function createProduct(req: Request, res: Response) {
     if (
       !reqProduct.name ||
       !reqProduct.rfid ||
-      !reqProduct.qrcode ||
       !reqProduct.numberCode ||
       !reqProduct.storageWarehouseId ||
       !reqProduct.deliveryWarehouseId ||
@@ -229,6 +253,11 @@ async function createProduct(req: Request, res: Response) {
       res.status(422);
       throw new Error("Missing data body");
     }
+    if (reqProduct.state == STATE_MAINTAIN.MAINTAIN) {
+      res.status(404);
+      throw new Error("Could not create product with state is maintain");
+    }
+
     const category: Category | null = await Category.findOne({
       where: { id: reqProduct.categoryId, state: STATE.ACTIVE },
     });
@@ -261,12 +290,12 @@ async function createProduct(req: Request, res: Response) {
       id: uuid(),
       name: reqProduct.name,
       rfid: reqProduct.rfid,
-      qrcode: reqProduct.qrcode,
       numberCode: reqProduct.numberCode,
       categoryId: reqProduct.categoryId,
       storageWarehouseId: reqProduct.storageWarehouseId,
       deliveryWarehouseId: reqProduct.deliveryWarehouseId,
       currentWarehouseId: reqProduct.currentWarehouseId,
+      maintainNext: reqProduct.maintainNext,
       state: reqProduct.state,
       option: reqProduct.option,
     });
@@ -297,7 +326,6 @@ async function updateProduct(req: Request, res: Response) {
     if (
       !newProduct.name ||
       !newProduct.rfid ||
-      !newProduct.qrcode ||
       !newProduct.numberCode ||
       !newProduct.storageWarehouseId ||
       !newProduct.deliveryWarehouseId ||
@@ -307,6 +335,10 @@ async function updateProduct(req: Request, res: Response) {
     ) {
       res.status(422);
       throw new Error("Missing data body");
+    }
+    if (newProduct.state == STATE_MAINTAIN.MAINTAIN) {
+      res.status(404);
+      throw new Error("Cannot update state to maintain");
     }
     const category: Category | null = await Category.findOne({
       where: { id: newProduct.categoryId, state: STATE.ACTIVE },
@@ -339,12 +371,12 @@ async function updateProduct(req: Request, res: Response) {
     product.set({
       name: newProduct.name,
       rfid: newProduct.rfid,
-      qrcode: newProduct.qrcode,
       numberCode: newProduct.numberCode,
       categoryId: newProduct.categoryId,
       storageWarehouseId: newProduct.storageWarehouseId,
       deliveryWarehouseId: newProduct.deliveryWarehouseId,
       currentWarehouseId: newProduct.currentWarehouseId,
+      maintainNext: newProduct.maintainNext,
       state: newProduct.state,
       option: newProduct.option,
     });
@@ -387,10 +419,121 @@ async function deleteProduct(req: Request, res: Response) {
   }
 }
 
+async function maintainProduct(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { description } = req.body;
+    const product: Product | null = await Product.findOne({
+      where: {
+        id: id,
+        state: [STATE_MAINTAIN.ACTIVE, STATE_MAINTAIN.MAINTAIN],
+      },
+    });
+    if (!product) {
+      res.status(404);
+      throw new Error("Id does not exit");
+    }
+    if (product.state == STATE_MAINTAIN.MAINTAIN) {
+      res.status(404);
+      throw new Error("Product state is maintenance");
+    }
+    const maintenance = await Maintenance.create({
+      id: uuid(),
+      productId: product.id,
+      startDate: new Date().getTime(),
+      finishDate: null,
+      description: description,
+      state: STATE_MAINTENANCE.DOING,
+      option: null,
+    });
+    product.set({
+      state: STATE_MAINTAIN.MAINTAIN,
+    });
+    product.save();
+    if (maintenance) {
+      res.status(200).json({ message: "Maintain product successfully" });
+    }
+  } catch (err: any) {
+    var statusCode = res.statusCode == 200 ? null : res.statusCode;
+    statusCode = statusCode || 404;
+    res.status(statusCode).json({
+      message: "Could not maintain product",
+      error: <Error>err.message,
+    });
+  }
+}
+
+async function completeMaintainProduct(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { nextDate } = req.body;
+    if (!nextDate) {
+      res.status(422);
+      throw new Error("Missing data body");
+    }
+    if ((nextDate as number) <= 0) {
+      res.status(422);
+      throw new Error("Missing data body");
+    }
+    const product: Product | null = await Product.findOne({
+      where: {
+        id: id,
+        state: [STATE_MAINTAIN.ACTIVE, STATE_MAINTAIN.MAINTAIN],
+      },
+    });
+    if (!product) {
+      res.status(404);
+      throw new Error("Id does not exit");
+    }
+    if (product.state !== STATE_MAINTAIN.MAINTAIN) {
+      res.status(404);
+      throw new Error("Product state is not maintained");
+    }
+    const listMaintenance = await Maintenance.findAll({
+      order: [["createdAt", "DESC"]],
+      where: {
+        productId: product.id,
+        state: STATE_MAINTENANCE.DOING,
+      },
+    });
+    if (!listMaintenance.length) {
+      res.status(404);
+      throw new Error("The product has never been maintained");
+    }
+
+    const maintenance = listMaintenance[0];
+    maintenance.set({
+      finishDate: new Date().getTime(),
+      nextDate: new Date().getTime() + nextDate,
+      state: STATE_MAINTENANCE.COMPLETED,
+    });
+    maintenance.save();
+    product.set({
+      state: STATE_MAINTAIN.ACTIVE,
+      maintainNext: new Date().getTime() + nextDate,
+    });
+    product.save();
+    if (maintenance) {
+      res
+        .status(200)
+        .json({ message: "Complete maintain product successfully" });
+    }
+  } catch (err: any) {
+    var statusCode = res.statusCode == 200 ? null : res.statusCode;
+    statusCode = statusCode || 404;
+    res.status(statusCode).json({
+      message: "Could not maintain product",
+      error: <Error>err.message,
+    });
+  }
+}
+
 export {
   getProduct,
   getListProduct,
   createProduct,
   updateProduct,
   deleteProduct,
+  maintainProduct,
+  completeMaintainProduct,
 };

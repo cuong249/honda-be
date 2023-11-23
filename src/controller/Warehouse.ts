@@ -54,7 +54,9 @@ async function getListWarehouse(req: Request, res: Response) {
     const { limit, offset, order, search, arrange, query } = req.query;
     const queryObj = query ? JSON.parse(query as string) : {};
 
-    const [space, api, url] = req.originalUrl.split("/");
+    const [space, api, urlAndQuery] = req.originalUrl.split("/");
+    const [url] = urlAndQuery.split("?");
+
     const type =
       url === "warehouse" ? TYPE_WAREHOUSE.HONDA : TYPE_WAREHOUSE.MAKER;
 
@@ -120,7 +122,9 @@ async function getListWarehouse(req: Request, res: Response) {
 async function createWarehouse(req: Request, res: Response) {
   try {
     const reqWarehouse: Warehouse = req.body;
-    const [space, api, url] = req.originalUrl.split("/");
+    const [space, api, urlAndQuery] = req.originalUrl.split("/");
+    const [url] = urlAndQuery.split("?");
+
     const type =
       url === "warehouse" ? TYPE_WAREHOUSE.HONDA : TYPE_WAREHOUSE.MAKER;
     if (!reqWarehouse.name || !reqWarehouse.address || !reqWarehouse.state) {

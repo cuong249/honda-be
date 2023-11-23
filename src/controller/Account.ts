@@ -142,6 +142,7 @@ async function getListAccount(req: Request, res: Response) {
 async function createAccount(req: Request, res: Response) {
   try {
     const reqAccount: Account = req.body;
+
     if (
       !reqAccount.firstName ||
       !reqAccount.lastName ||
@@ -171,7 +172,6 @@ async function createAccount(req: Request, res: Response) {
         }
       }
     );
-    let account: Account = new Account();
     switch (reqAccount.role) {
       case ROLE.ADMIN:
         break;
@@ -181,7 +181,7 @@ async function createAccount(req: Request, res: Response) {
         const warehouse: Warehouse | null = await Warehouse.findOne({
           where: {
             [Op.and]: [
-              { id: account.warehouseId },
+              { id: reqAccount.warehouseId },
               {
                 type: TYPE_WAREHOUSE.MAKER,
               },
@@ -200,7 +200,7 @@ async function createAccount(req: Request, res: Response) {
         const warehouse1: Warehouse | null = await Warehouse.findOne({
           where: {
             [Op.and]: [
-              { id: account.warehouseId },
+              { id: reqAccount.warehouseId },
               {
                 type: TYPE_WAREHOUSE.HONDA,
               },
@@ -220,7 +220,7 @@ async function createAccount(req: Request, res: Response) {
         throw new Error("ROLE does not exist");
         break;
     }
-    account = await Account.create({
+    const account = await Account.create({
       id: uuid(),
       firstName: reqAccount.firstName,
       lastName: reqAccount.lastName,
@@ -306,7 +306,7 @@ async function updateAccount(req: Request, res: Response) {
         const warehouse: Warehouse | null = await Warehouse.findOne({
           where: {
             [Op.and]: [
-              { id: account.warehouseId },
+              { id: newAccount.warehouseId },
               {
                 type: TYPE_WAREHOUSE.MAKER,
               },
@@ -325,7 +325,7 @@ async function updateAccount(req: Request, res: Response) {
         const warehouse1: Warehouse | null = await Warehouse.findOne({
           where: {
             [Op.and]: [
-              { id: account.warehouseId },
+              { id: newAccount.warehouseId },
               {
                 type: TYPE_WAREHOUSE.HONDA,
               },
@@ -375,9 +375,9 @@ async function updateAccount(req: Request, res: Response) {
         // state: newAccount.state,
         option: newAccount.option,
       });
-      await account.save();
-      res.status(200).json({ account });
     }
+    await account.save();
+    res.status(200).json({ account });
   } catch (err: any) {
     var statusCode = res.statusCode == 200 ? null : res.statusCode;
     statusCode = statusCode || 404;
